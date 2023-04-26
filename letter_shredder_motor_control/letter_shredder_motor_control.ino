@@ -10,15 +10,15 @@
 #define L_135 110
 #define R_45 55
 #define R_135 100
-#define M_45 45
+#define M_45 55
 #define M_135 135
 #define NEUTRAL 90
 
 #define LL_SERVO_PIN PD3
 #define RL_SERVO_PIN PD5
 #define M_SERVO_PIN PD6
-#define L_SERVO_PIN PB1
-#define R_SERVO_PIN PB2
+#define L_SERVO_PIN 9
+#define R_SERVO_PIN 10
 
 #define TOP_LASER_PIN PC4
 #define BOX_1_LASER_PIN PC3
@@ -26,6 +26,7 @@
 #define BOX_3_LASER_PIN PC1
 #define BOX_4_LASER_PIN PC0
 
+#define MAX_INT 2147483647
 
 Servo left_latch;
 Servo right_latch;
@@ -40,6 +41,11 @@ int box_2_laser = 1;
 int box_3_laser = 1;
 int box_4_laser = 1;
 
+
+int timeout = 0;
+int sum = 0;
+int box_number;
+int seq = 0;
 
 char bytes[100] = "";
 String incomingBytes;
@@ -97,8 +103,6 @@ void send_to_box_1(){
     left_latch.write(LL_OPEN);
     right_latch.write(RL_OPEN);
     delay(1500);
-    // STEP 3: Reset servos
-    reset_servo();
 }
 
 void send_to_box_2(){
@@ -110,8 +114,7 @@ void send_to_box_2(){
   left_latch.write(LL_OPEN);
   right_latch.write(RL_OPEN);
   delay(1500);
-  // STEP 3: Reset servos
-  reset_servo();
+
 }
 
 void send_to_box_3(){
@@ -123,8 +126,7 @@ void send_to_box_3(){
   left_latch.write(LL_OPEN);
   right_latch.write(RL_OPEN);
   delay(1500);
-  // STEP 3: Reset servos
-  reset_servo();
+
 
 }
 
@@ -137,16 +139,16 @@ void send_to_box_4(){
   left_latch.write(LL_OPEN);
   right_latch.write(RL_OPEN);
   delay(1000);
-  // STEP 3: Reset servos
-  reset_servo();
+
 }
 
 
 int validString(char* bytes){
-  if (strncmp(bytes, "Box: ", 5*sizeof(char))){
+  int ret = strncmp(bytes, "Box: ", 5);
+  if (ret == 0){
     return 1;
   }
-  return 0;
+  return ret;
 }
 
 int parseString(char* bytes){
@@ -166,20 +168,22 @@ void loop() {
 
   while (state == WAITING_FOR_MAIL){
     // Mail has shown up on the sensor
+    reset_servo();
+    memset(bytes, '\0', 100);
+    box_number = -1;
+    incomingBytes = "";
     if ((top_laser = analogRead(TOP_LASER_PIN)) > 512){
       Serial.printf("Ready\n", top_laser);
-    }else{
-      Serial.printf("\tInvalid Laser Value: %d\n", top_laser);
+      state = WAITING_FOR_PI;
     }
   }
 
   while (state == WAITING_FOR_PI){
     incomingBytes = Serial.readStringUntil('\n');
     incomingBytes.toCharArray(bytes, 100);
-
     // Check for a valid string
     if (validString(bytes) == 1){
-      int box_number = parseString(bytes);
+      box_number = parseString(bytes);
       switch (box_number){
         case 1:
           send_to_box_1();
@@ -204,36 +208,49 @@ void loop() {
           break;
       }
     }else{
-      Serial.println("\tInvalid\n");
+      Serial.printf("\tInvalid, Recieved:%s\n", bytes);
       state = WAITING_FOR_PI;
     }
   }
 
   while (state == WAITING_FOR_DROP){
+    
     box_1_laser = analogRead(BOX_1_LASER_PIN);
     box_2_laser = analogRead(BOX_2_LASER_PIN);
     box_3_laser = analogRead(BOX_3_LASER_PIN);
     box_4_laser = analogRead(BOX_4_LASER_PIN);
-    int sum =  box_1_laser + box_2_laser + box_3_laser + box_4_laser;
+    sum =  box_1_laser + box_2_laser + box_3_laser;
     // We have something blocking one of the sensors so we send the values of the lasers to the pi for debugging
     if (sum > 1536){
       Serial.printf("Mail is blocking sensor!! Box 1: %d\tBox 2: %d\tBox 3: %d\tBox 4: %d\tSum: %d\n", box_1_laser, box_2_laser, box_3_laser, box_4_laser, sum);
       state = WAITING_FOR_MAIL;
+      sum = 0;
     }else{
-      if (box_1_laser > 512){
-        Serial.println("Mail: 1\n");
+      if (box_number == 4){
+        delay(5000);        
+        Serial.printf("Mail is blocking sensor!! Box 1: %d\tBox 2: %d\tBox 3: %d\tBox 4: %d\tSum: %d\n", box_1_laser, box_2_laser, box_3_laser, box_4_laser, sum);
+        state = WAITING_FOR_MAIL;
+      }else if (box_1_laser > 512){
+        // Serial.println("Mail: 1 \n");
+        Serial.printf("Mail is blocking sensor!! Box 1: %d\tBox 2: %d\tBox 3: %d\tBox 4: %d\tSum: %d\n", box_1_laser, box_2_laser, box_3_laser, box_4_laser, sum);
         state = WAITING_FOR_MAIL;
       }else if (box_2_laser > 512){
-        Serial.println("Mail: 2\n");
+        // Serial.println("Mail: 2 \n");
+        Serial.printf("Mail is blocking sensor!! Box 1: %d\tBox 2: %d\tBox 3: %d\tBox 4: %d\tSum: %d\n", box_1_laser, box_2_laser, box_3_laser, box_4_laser, sum);
         state = WAITING_FOR_MAIL;
       }else if (box_3_laser > 512){
-        Serial.println("Mail: 3\n");
+        // Serial.println("Mail: 3 \n");
+        Serial.printf("Mail is blocking sensor!! Box 1: %d\tBox 2: %d\tBox 3: %d\tBox 4: %d\tSum: %d\n", box_1_laser, box_2_laser, box_3_laser, box_4_laser, sum);
         state = WAITING_FOR_MAIL;
-      }else if (box_4_laser > 512){
-        Serial.println("Mail: 4\n");
+      }else if (timeout >= MAX_INT-10){
+        Serial.println("Mail timed out.\n");
         state = WAITING_FOR_MAIL;
+        timeout = 0;
+      }else{
+        timeout++;
       }
     }
+    sum = 0;
   }
 
 
